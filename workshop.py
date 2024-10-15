@@ -2,12 +2,15 @@ from flask import Flask, request, jsonify
 from PIL import Image
 import face_recognition
 import numpy as np
+import pytesseract  # Pour l'OCR
 import io
 from flask_cors import CORS, cross_origin
 from transformers import pipeline
 
 # Charger le pipeline de classification de texte pour détecter la toxicité
 classifier = pipeline("text-classification", model="unitary/toxic-bert")
+
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # Initialiser Flask
 app = Flask(__name__)
@@ -19,37 +22,74 @@ cors = CORS(app)
 # Route pour comparer deux visages
 @app.route('/compare_faces', methods=['POST'])
 def compare_faces():
-    if 'image1' not in request.files or 'image2' not in request.files:
+    if 'image1' not in request.files or 'image2' not in request.files or 'image3' not in request.files:
         return jsonify({"error": "Veuillez fournir deux images."}), 400
 
     # Récupérer les deux images
-    image1 = request.files['image1'].read()
-    image2 = request.files['image2'].read()
+    image1_data = request.files['image1'].read()
+    image2_data = request.files['image2'].read()
+    image3_data = request.files['image3'].read()
 
     # Charger les images avec face_recognition
-    image1 = face_recognition.load_image_file(io.BytesIO(image1))
-    image2 = face_recognition.load_image_file(io.BytesIO(image2))
+    image1 = face_recognition.load_image_file(io.BytesIO(image1_data))
+    image2 = face_recognition.load_image_file(io.BytesIO(image2_data))
+    image3 = face_recognition.load_image_file(io.BytesIO(image3_data))
+
+    # 1. Extraction du texte de la carte d'identité (image1)
+    try:
+        id_image_pil = Image.open(io.BytesIO(image1_data))  # Charger l'image en format PIL
+        ocr_text = pytesseract.image_to_string(id_image_pil)  # Extraire le texte avec Tesseract
+
+        # Chercher le nom dans l'OCR (à ajuster selon le format de la carte d'identité)
+        lines = ocr_text.split("\n")
+        name = None
+
+        # 1. Essayer de trouver le nom avec l'ancien format (sur la même ligne que "NOM")
+        for line in lines:
+            if "NOM" in line.upper():  # Vérifier si la ligne contient le mot "NOM"
+                if ":" in line:
+                    name = line.split(":")[-1].strip()  # Extraire le nom après ":"
+                else:
+                    name = line.strip().split()[-1]  # Si pas de ":", extraire le dernier mot après "NOM"
+                break
+
+        # 2. Si aucun nom trouvé, essayer le nouveau format (nom sur la ligne suivante après "NOM / Surname")
+        if not name:
+            for i, line in enumerate(lines):
+                if "NOM" in line.upper() or "SUMAME" in line.upper():  # Vérifier si la ligne contient "NOM / Surname"
+                    if i + 1 < len(lines):  # Assurer qu'il y a bien une ligne suivante
+                        name = lines[i + 1].strip()  # Le nom est sur la ligne suivante
+                    break
+
+        if not name:
+            return jsonify({"error": "Carte invalide. Nom introuvable."}), 400
+
+    except Exception as e:
+        return jsonify({"error": f"Erreur lors de l'extraction du texte: {str(e)}"}), 500
 
     # Encoder les visages des deux images
     image1_face_encodings = face_recognition.face_encodings(image1)
     image2_face_encodings = face_recognition.face_encodings(image2)
+    image3_face_encodings = face_recognition.face_encodings(image3)
 
     # Vérifier si des visages sont détectés dans les deux images
-    if len(image1_face_encodings) == 0 or len(image2_face_encodings) == 0:
+    if len(image1_face_encodings) == 0 or len(image3_face_encodings) == 0:
         return jsonify({"error": "Impossible de détecter un visage dans l'une des images."}), 400
 
     # Prendre le premier visage trouvé dans chaque image
     image1_face_encoding = image1_face_encodings[0]
     image2_face_encoding = image2_face_encodings[0]
+    image3_face_encoding = image3_face_encodings[0]
 
     # Comparer les visages
-    results = face_recognition.compare_faces([image1_face_encoding], image2_face_encoding)
-    face_distance = face_recognition.face_distance([image1_face_encoding], image2_face_encoding)[0]
+    results = face_recognition.compare_faces([image1_face_encoding], image3_face_encoding)
+    face_distance = face_recognition.face_distance([image1_face_encoding], image3_face_encoding)[0]
 
-    # Conversion explicite pour éviter l'erreur JSON
+    # Retourner le résultat en JSON, y compris le nom récupéré
     return jsonify({
         "same_person": bool(results[0]),  # Conversion en booléen Python natif
-        "face_distance": float(face_distance)  # Conversion explicite en float (optionnel mais sûr)
+        "face_distance": float(face_distance),  # Conversion explicite en float
+        "name": name  # Ajout du nom récupéré sur la carte d'identité
     })
 
 # Route pour analyser la toxicité d'un message
