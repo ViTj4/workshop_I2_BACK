@@ -4,11 +4,11 @@ import face_recognition
 import numpy as np
 import io
 from flask_cors import CORS, cross_origin
-from flask_talisman import Talisman
+#from flask_talisman import Talisman
 
 
 app = Flask(__name__)
-Talisman(app, strict_transport_security=True, content_security_policy=None)
+#Talisman(app, strict_transport_security=True, content_security_policy=None)
 cors = CORS(app)
 @cross_origin()
 @app.route('/compare_faces', methods=['POST'])
@@ -47,6 +47,4 @@ def compare_faces():
     })
 
 if __name__ == '__main__':
-    app.run(debug=True)
-
-
+      app.run(host='0.0.0.0', debug=True)
