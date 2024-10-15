@@ -4,13 +4,19 @@ import face_recognition
 import numpy as np
 import io
 from flask_cors import CORS, cross_origin
-#from flask_talisman import Talisman
+from transformers import pipeline
 
+# Charger le pipeline de classification de texte pour détecter la toxicité
+classifier = pipeline("text-classification", model="unitary/toxic-bert")
 
+# Initialiser Flask
 app = Flask(__name__)
-#Talisman(app, strict_transport_security=True, content_security_policy=None)
+
+# CORS pour permettre les requêtes depuis le front-end
 cors = CORS(app)
 @cross_origin()
+
+# Route pour comparer deux visages
 @app.route('/compare_faces', methods=['POST'])
 def compare_faces():
     if 'image1' not in request.files or 'image2' not in request.files:
@@ -46,5 +52,36 @@ def compare_faces():
         "face_distance": float(face_distance)  # Conversion explicite en float (optionnel mais sûr)
     })
 
+# Route pour analyser la toxicité d'un message
+@app.route('/analyze_message', methods=['POST'])
+def analyze_message():
+    data = request.get_json()  # Récupérer les données JSON envoyées par le front
+    if 'message' not in data:
+        return jsonify({"error": "Veuillez fournir un message à analyser."}), 400
+    
+    message = data['message']
+
+    # Analyser le message
+    result = classifier(message)[0]
+    label = result['label']
+    score = result['score']
+
+    # Interpréter le résultat basé sur le score
+    if score > 0.75 and label == 'toxic':
+        status = "Toxic"
+    elif score > 0.50 and label == 'toxic':
+        status = "Suspicious"
+    else:
+        status = "OK"
+
+    # Renvoyer le résultat en JSON
+    return jsonify({
+        "message": message,
+        "label": label,
+        "score": score,
+        "status": status
+    })
+
+# Lancer l'application Flask
 if __name__ == '__main__':
-      app.run(host='0.0.0.0', debug=True)
+    app.run(host='0.0.0.0', debug=True)
