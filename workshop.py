@@ -42,27 +42,7 @@ def compare_faces():
 
         # Chercher le nom dans l'OCR (à ajuster selon le format de la carte d'identité)
         lines = ocr_text.split("\n")
-        name = None
 
-        # 1. Essayer de trouver le nom avec l'ancien format (sur la même ligne que "NOM")
-        for line in lines:
-            if "NOM" in line.upper():  # Vérifier si la ligne contient le mot "NOM"
-                if ":" in line:
-                    name = line.split(":")[-1].strip()  # Extraire le nom après ":"
-                else:
-                    name = line.strip().split()[-1]  # Si pas de ":", extraire le dernier mot après "NOM"
-                break
-
-        # 2. Si aucun nom trouvé, essayer le nouveau format (nom sur la ligne suivante après "NOM / Surname")
-        if not name:
-            for i, line in enumerate(lines):
-                if "NOM" in line.upper() or "SUMAME" in line.upper():  # Vérifier si la ligne contient "NOM / Surname"
-                    if i + 1 < len(lines):  # Assurer qu'il y a bien une ligne suivante
-                        name = lines[i + 1].strip()  # Le nom est sur la ligne suivante
-                    break
-
-        if not name:
-            return jsonify({"error": "Carte invalide. Nom introuvable."}), 400
 
     except Exception as e:
         return jsonify({"error": f"Erreur lors de l'extraction du texte: {str(e)}"}), 500
@@ -89,7 +69,7 @@ def compare_faces():
     return jsonify({
         "same_person": bool(results[0]),  # Conversion en booléen Python natif
         "face_distance": float(face_distance),  # Conversion explicite en float
-        "name": name  # Ajout du nom récupéré sur la carte d'identité
+        "name": lines  # Ajout du nom récupéré sur la carte d'identité
     })
 
 # Route pour analyser la toxicité d'un message
